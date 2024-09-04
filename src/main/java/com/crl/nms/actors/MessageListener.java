@@ -51,10 +51,13 @@ public class MessageListener {
         Date dt=new Date();
 
         logger.info("Received Message Of Db backup  "+":  " + message);
-        try {
+        /*try {
             // Parse the backup time from the message
             JsonNode jsonNode = objectMapper.readTree(message);
-            String backupTimeStr = jsonNode.get("backupTime").asText();
+
+            CronMessage cronMessage=objectMapper.readValue(message, CronMessage.class);
+            //Global.cronMessage=cronMessage;
+            String backupTimeStr = cronMessage.getTime();
             LocalDateTime backupTime = LocalDateTime.parse(backupTimeStr, DateTimeFormatter.ISO_DATE_TIME);
 
             // Calculate delay
@@ -69,7 +72,25 @@ public class MessageListener {
         } catch (JsonProcessingException e) {
             logger.error("Failed to parse message", e);
         }
+*/
 
+        // Assuming message format is "HH:mm:ss" (24-hour time format)
+        logger.info("Received schedule time from Kafka: {}", message);
+
+        try {
+            CronMessage cronMessage=objectMapper.readValue(message, CronMessage.class);
+
+       /*     String backupTimeStr = cronMessage.getTime();
+            LocalDateTime backupTime = LocalDateTime.parse(backupTimeStr, DateTimeFormatter.ISO_DATE_TIME)*/;
+            if(cronMessage.getType().equals("AUTO")) {
+                dbHandlerService.scheduleBackupBasedOnTime(cronMessage.getTime());
+            }
+            else {
+                dbHandlerService.createBackup();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to schedule backup based on Kafka message", e);
+        }
     }
 
     @KafkaListener(topics = Global.GET_DBBACKUP_LIST, groupId = "getdbbackuplist",containerFactory = "kafkaListenerContainerFactory")

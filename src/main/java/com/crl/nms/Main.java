@@ -1,38 +1,4 @@
-<<<<<<< HEAD
-package com.crl.nms;
 
-import com.crl.nms.service.DbHandlerService;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-
-@SpringBootApplication
-public class Main {
-
-    public static void main(String[] args) {
-
-        // Get the path where the JAR file is executed
-        String jarExecutionPath = System.getProperty("user.dir");
-        System.out.println(jarExecutionPath);
-
-        // Construct the path to applicationnedetail.properties relative to the execution path
-        String dynamicPath = "file:" + jarExecutionPath + "/applicationnedetail.properties";
-
-        // Set the dynamic path for spring.config.location
-        System.setProperty("spring.config.location", dynamicPath);
-        SpringApplication.run(Main.class, args);
-    }
-
-    @Bean
-    public CommandLineRunner commandLineRunner(DbHandlerService dbHandlerService) {
-
-        return args -> {
-            dbHandlerService.initiateActor(dbHandlerService);
-        };
-    }
-}
-=======
 package com.crl.nms;
 
 import com.crl.nms.common.utilities.Global;
@@ -46,14 +12,17 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableScheduling
 public class Main {
 
     private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     @Autowired
     private KafkaTemplate<String, String> kafkaJSONStringMsgSender;
+
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -92,4 +61,4 @@ public class Main {
         }
     }
 }
->>>>>>> ce7b643 (CBTC_DB_BACKUP)
+

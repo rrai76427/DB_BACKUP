@@ -171,7 +171,9 @@ public class DbHandlerService {
 
 package com.crl.nms.service;
 
+import com.crl.nms.common.utilities.Global;
 import com.crl.nms.configuration.DbConfigProperties;
+import com.crl.nms.messages.CronMessage;
 import com.crl.nms.pojo.DataBaseBackupDirectoryContent;
 import com.crl.nms.pojo.ListOfFileInDataBaseBackupDirectory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -181,6 +183,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -189,11 +193,14 @@ import java.io.InputStreamReader;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -209,9 +216,16 @@ public class DbHandlerService {
 
     @Autowired
     private DbConfigProperties dbConfigProperties;
-
+    private final TaskScheduler taskScheduler;
+    @Autowired
+    public DbHandlerService(TaskScheduler taskScheduler) {
+        this.taskScheduler = taskScheduler;
+    }
     private static final Logger logger = LoggerFactory.getLogger(DbHandlerService.class);
 
+    //Global.cronMessage;
+
+    @Scheduled(cron = "0 0 0 * * *")
     public void createBackup() throws IOException {
         // Read configuration from DbConfigProperties
         String backupDir = dbConfigProperties.getBackupDir();
@@ -276,17 +290,6 @@ public class DbHandlerService {
             throw new IOException("Command failed with exit code " + process.exitValue());
         }
     }
-
-    public void scheduleBackup(long delayMillis) {
-        scheduler.schedule(() -> {
-            try {
-                createBackup();
-            } catch (IOException e) {
-                logger.error("Backup process failed", e);
-            }
-        }, delayMillis, TimeUnit.MILLISECONDS);
-    }
-
     public void sendBackupDirectoryContentToKafka(String backupDir) {
         try {
             List<DataBaseBackupDirectoryContent> fileContents = getBackupDirectoryContents(backupDir);
@@ -327,6 +330,30 @@ public class DbHandlerService {
         } catch (Exception e) {
             logger.error("Failed to send message to Kafka topic: {}", topicName, e);
         }
+    }
+
+    public void scheduleBackupBasedOnTime(String timeString) throws Exception {
+
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+        LocalTime backupTime = LocalTime.parse(timeString, timeFormatter);
+        LocalTime now = LocalTime.now();
+
+        // Calculate delay until the specified time
+        long delay = backupTime.toSecondOfDay() - now.toSecondOfDay();
+        if (delay < 0) {
+            // If the time has already passed for today, schedule for the next day
+            delay += 24 * 60 * 60; // seconds in a day
+        }
+
+        logger.info("Scheduling backup for {} seconds from now", delay);
+
+        taskScheduler.schedule(() -> {
+            try {
+                createBackup();
+            } catch (IOException e) {
+                logger.error("Backup process failed", e);
+            }
+        }, new Date(System.currentTimeMillis() + delay * 1000));
     }
 }
 
