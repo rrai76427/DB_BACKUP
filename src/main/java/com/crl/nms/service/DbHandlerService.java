@@ -266,6 +266,7 @@ public class DbHandlerService {
 
         try {
             executeCommand(dockerExecCommand);
+
         } catch (IOException | InterruptedException e) {
             logger.error("Backup process failed", e);
             throw new IOException("Backup process failed", e);

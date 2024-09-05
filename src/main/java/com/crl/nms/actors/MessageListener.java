@@ -84,12 +84,16 @@ public class MessageListener {
             LocalDateTime backupTime = LocalDateTime.parse(backupTimeStr, DateTimeFormatter.ISO_DATE_TIME)*/;
             if(cronMessage.getType().equals("AUTO")) {
                 dbHandlerService.scheduleBackupBasedOnTime(cronMessage.getTime());
+                dbHandlerService.sendMsgToKAFKA("alarm_notification","Auto DatabaseBackup list sent on "+dt);
             }
             else {
                 dbHandlerService.createBackup();
+                dbHandlerService.sendMsgToKAFKA("alarm_notification","Manual DatabaseBackup list sent on"+dt);
             }
+
         } catch (Exception e) {
             logger.error("Failed to schedule backup based on Kafka message", e);
+            dbHandlerService.sendMsgToKAFKA("alarm_notification","An error is occured while database backup is taken !!!");
         }
     }
 
@@ -99,7 +103,7 @@ public class MessageListener {
         logger.info("Received Message Of Db backup list "+":  " + message);
         try {
             dbHandlerService.sendBackupDirectoryContentToKafka(backupDir);
-            dbHandlerService.sendMsgToKAFKA("takebackuplist","DatabaseBackup list sent");
+            dbHandlerService.sendMsgToKAFKA("alarm_notification","DatabaseBackup list sent");
         } catch (Exception e) {
             logger.error(e.getMessage());
         }
