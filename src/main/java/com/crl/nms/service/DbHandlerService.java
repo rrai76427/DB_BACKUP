@@ -174,6 +174,7 @@ package com.crl.nms.service;
 import com.crl.nms.common.utilities.Global;
 import com.crl.nms.configuration.DbConfigProperties;
 import com.crl.nms.messages.CronMessage;
+import com.crl.nms.messages.ImportingMessage;
 import com.crl.nms.pojo.DataBaseBackupDirectoryContent;
 import com.crl.nms.pojo.ListOfFileInDataBaseBackupDirectory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -192,12 +193,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -236,7 +240,7 @@ public class DbHandlerService {
         String dbPassword = dbConfigProperties.getPassword();
 
         Path backupDirPath = Paths.get(backupDir);
-
+       // sendBackupDirectoryContentToKafka(backupDir);
         if (!Files.isDirectory(backupDirPath)) {
             try {
                 Files.createDirectories(backupDirPath);
@@ -266,6 +270,8 @@ public class DbHandlerService {
 
         try {
             executeCommand(dockerExecCommand);
+            logger.info("DataBase backup Completed Successfully !!!");
+            sendBackupDirectoryContentToKafka(backupDir);
 
         } catch (IOException | InterruptedException e) {
             logger.error("Backup process failed", e);
@@ -294,16 +300,18 @@ public class DbHandlerService {
     public void sendBackupDirectoryContentToKafka(String backupDir) {
         try {
             List<DataBaseBackupDirectoryContent> fileContents = getBackupDirectoryContents(backupDir);
-            ListOfFileInDataBaseBackupDirectory listOfFileInBackupDir = new ListOfFileInDataBaseBackupDirectory(fileContents);
-            String jsonMessage = objectMapper.writeValueAsString(listOfFileInBackupDir);
+           // ListOfFileInDataBaseBackupDirectory listOfFileInBackupDir = new ListOfFileInDataBaseBackupDirectory(fileContents);
+            String jsonMessage = objectMapper.writeValueAsString(fileContents);
             logger.info(jsonMessage);
-            kafkaJSONStringMsgSender.send("backupFileDetails", jsonMessage); // Specify your Kafka topic
-            logger.info("Published backup directory content to Kafka");
+            kafkaJSONStringMsgSender.send("backup_file_list", jsonMessage); // Specify your Kafka topic
+           // logger.info("Published backup directory content to Kafka");
+            logger.info("{} : Published backup directory content to Kafka successfully on topic: backup_file_list ",jsonMessage);
+
         } catch (Exception e) {
             logger.error("Failed to send backup directory content to Kafka", e);
         }
     }
-    private List<DataBaseBackupDirectoryContent> getBackupDirectoryContents(String backupDir) {
+    private List<DataBaseBackupDirectoryContent> getBackupDirectoryContentsOld(String backupDir) {
         List<DataBaseBackupDirectoryContent> fileContents = new ArrayList<>();
         try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(Paths.get(backupDir))) {
             for (Path path : directoryStream) {
@@ -311,9 +319,86 @@ public class DbHandlerService {
                     BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
                     String fileName = path.getFileName().toString();
                     String dateOfFileCreation = attrs.creationTime().toString().trim(); // ISO format
+                    System.out.println("Date of File Creation "+dateOfFileCreation);
                     String fileSize = String.valueOf(attrs.size());
 
                     DataBaseBackupDirectoryContent content = new DataBaseBackupDirectoryContent(fileName, dateOfFileCreation, fileSize);
+                    fileContents.add(content);
+                }
+            }
+        } catch (IOException e) {
+            logger.error("Failed to read directory contents", e);
+        }
+        return fileContents;
+    }
+
+
+    public List<DataBaseBackupDirectoryContent> getBackupDirectoryContentsold1(String backupDir) {
+        List<DataBaseBackupDirectoryContent> fileContents = new ArrayList<>();
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(Paths.get(backupDir))) {
+            for (Path path : directoryStream) {
+                if (Files.isRegularFile(path)) {
+                    BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+
+                    // Get file name
+                    String fileName = path.getFileName().toString();
+
+                    // Format creation date to dd-MM-yyyy HH:mm:ss
+                   /* Date creationDate = new Date(attrs.creationTime().toMillis());
+                    SimpleDateFormat dateFormatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+                    String dateOfFileCreation = dateFormatter.format(creationDate);*/
+
+
+                    //Get creation time
+                    FileTime creationTime=attrs.creationTime();
+                    SimpleDateFormat sdf=new SimpleDateFormat("yyyy-MM-dd HH:mm");
+                    Date dateOfFileCreation=new Date(creationTime.toMillis());
+
+                    // Convert size to MB
+                    double fileSizeInMb = attrs.size() / (1024.0 * 1024.0);
+                    String fileSize = String.format("%.2f MB", fileSizeInMb);
+
+                    System.out.println("Date of File Creation: " + dateOfFileCreation);
+                    System.out.println("File Size: " + fileSize);
+
+                    // Create content object and add to list
+                    DataBaseBackupDirectoryContent content = new DataBaseBackupDirectoryContent(fileName, sdf.format(dateOfFileCreation), fileSize);
+                    fileContents.add(content);
+                }
+            }
+        } catch (IOException e) {
+            logger.error("Failed to read directory contents", e);
+        }
+        return fileContents;
+    }
+    public List<DataBaseBackupDirectoryContent> getBackupDirectoryContents(String backupDir) {
+        List<DataBaseBackupDirectoryContent> fileContents = new ArrayList<>();
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(Paths.get(backupDir))) {
+            for (Path path : directoryStream) {
+                if (Files.isRegularFile(path)) {
+                    BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+
+                    // Get file name
+                    String fileName = path.getFileName().toString();
+
+                    // Format creation date to dd-MM-yyyy HH:mm:ss
+                    FileTime creationTime = attrs.creationTime();
+                    FileTime modifiedTime = attrs.lastModifiedTime();
+                    SimpleDateFormat dateFormatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+                    // Set the timezone to the default system timezone
+                    dateFormatter.setTimeZone(TimeZone.getDefault());
+                    String dateOfFileCreation = dateFormatter.format(new Date(creationTime.toMillis()));
+                    String dateOfFileModification = dateFormatter.format(new Date(modifiedTime.toMillis()));
+                    // Convert size to MB
+                    double fileSizeInMb = attrs.size() / (1024.0 * 1024.0);
+                    String fileSize = String.format("%.2f MB", fileSizeInMb);
+
+                    System.out.println("Date of File Creation: " + dateOfFileCreation);
+                    System.out.println("Date of File Modification: " + dateOfFileModification);
+                    System.out.println("File Size: " + fileSize);
+
+                    // Create content object and add to list
+                    DataBaseBackupDirectoryContent content = new DataBaseBackupDirectoryContent(fileName, dateOfFileModification, fileSize);
                     fileContents.add(content);
                 }
             }
@@ -327,7 +412,7 @@ public class DbHandlerService {
         try {
             String message = objectMapper.writeValueAsString(messages);
             kafkaJSONStringMsgSender.send(topicName, message);
-            logger.info("Published successfully to Kafka topic: {}", topicName);
+            logger.info("Message {} :Published successfully to Kafka topic: {}",message, topicName);
         } catch (Exception e) {
             logger.error("Failed to send message to Kafka topic: {}", topicName, e);
         }
@@ -355,6 +440,52 @@ public class DbHandlerService {
                 logger.error("Backup process failed", e);
             }
         }, new Date(System.currentTimeMillis() + delay * 1000));
+    }
+
+    public void dbImport(ImportingMessage importingMessage) {
+
+        // Read configuration from DbConfigProperties
+        String backupDir = dbConfigProperties.getBackupDir();
+        String dbHost = dbConfigProperties.getHost();
+        String dbPort = dbConfigProperties.getPort();
+        String dbName = dbConfigProperties.getName();
+        String dbUser = dbConfigProperties.getUser();
+        String dbPassword = dbConfigProperties.getPassword();
+
+
+        try {
+          String  backupFilePath=importingMessage.getFileName();
+            // Constructing the pg_restore command
+            String command = String.format(
+                    "pg_restore -h %s -p %s -U %s -d %s -v %s",
+                    dbHost, dbPort, dbUser, dbName, backupFilePath
+            );
+
+            // Set environment variable for password
+            ProcessBuilder processBuilder = new ProcessBuilder("bash", "-c", command);
+            processBuilder.environment().put("PGPASSWORD", dbPassword);
+
+            // Execute the command
+            Process process = processBuilder.start();
+
+            // Reading the output of the process
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+
+            // Waiting for the process to complete
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("Backup restored successfully!");
+            } else {
+                System.err.println("Backup restoration failed!");
+            }
+
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }
 

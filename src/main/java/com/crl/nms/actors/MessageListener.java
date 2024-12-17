@@ -4,6 +4,7 @@ package com.crl.nms.actors;
 import com.crl.nms.common.utilities.Global;
 import com.crl.nms.configuration.DbConfigProperties;
 import com.crl.nms.messages.CronMessage;
+import com.crl.nms.messages.ImportingMessage;
 import com.crl.nms.service.DbHandlerService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -84,11 +85,13 @@ public class MessageListener {
             LocalDateTime backupTime = LocalDateTime.parse(backupTimeStr, DateTimeFormatter.ISO_DATE_TIME)*/;
             if(cronMessage.getType().equals("AUTO")) {
                 dbHandlerService.scheduleBackupBasedOnTime(cronMessage.getTime());
-                dbHandlerService.sendMsgToKAFKA("alarm_notification","Auto DatabaseBackup list sent on "+dt);
+                dbHandlerService.sendMsgToKAFKA("alarm_notification","Auto DatabaseBackup Completed Successfully "+dt);
+                logger.info("{} : Published successfully to Kafka topic: alarm_notification ",message);
             }
             else {
                 dbHandlerService.createBackup();
-                dbHandlerService.sendMsgToKAFKA("alarm_notification","Manual DatabaseBackup list sent on"+dt);
+                dbHandlerService.sendMsgToKAFKA("alarm_notification","Manual DatabaseBackup Completed Successfully on"+dt);
+                logger.info("{} : Published successfully to Kafka topic: alarm_notification ",message);
             }
 
         } catch (Exception e) {
@@ -104,6 +107,23 @@ public class MessageListener {
         try {
             dbHandlerService.sendBackupDirectoryContentToKafka(backupDir);
             dbHandlerService.sendMsgToKAFKA("alarm_notification","DatabaseBackup list sent");
+            logger.info("{} : Published successfully to Kafka topic: alarm_notification ",message);
+
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+    }
+
+    @KafkaListener(topics = Global.GET_DB_IMPORT, groupId = "getdbbackuplist",containerFactory = "kafkaListenerContainerFactory")
+    public void listenForDbImport(String message) {
+        Date dt=new Date();
+        logger.info("Received Message Of Db backup list "+":  " + message);
+        try {
+            ImportingMessage importingMessage=objectMapper.readValue(message, ImportingMessage.class);
+            dbHandlerService.dbImport(importingMessage);
+            dbHandlerService.sendMsgToKAFKA("alarm_notification","Database Imported");
+            logger.info("{} : Published successfully to Kafka topic: alarm_notification ",message);
+
         } catch (Exception e) {
             logger.error(e.getMessage());
         }

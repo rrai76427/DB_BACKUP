@@ -2,12 +2,12 @@ package com.crl.nms.pojo;
 
 public class DataBaseBackupDirectoryContent {
     String fileName;
-    String DateOfFileCreation;
+    String dateOfFileCreation;
     String fileSize;
 
     public DataBaseBackupDirectoryContent(String fileName, String dateOfFileCreation, String fileSize) {
         this.fileName = fileName;
-        DateOfFileCreation = dateOfFileCreation;
+        this.dateOfFileCreation = dateOfFileCreation;
         this.fileSize = fileSize;
     }
 
@@ -23,11 +23,11 @@ public class DataBaseBackupDirectoryContent {
     }
 
     public String getDateOfFileCreation() {
-        return DateOfFileCreation;
+        return dateOfFileCreation;
     }
 
     public void setDateOfFileCreation(String dateOfFileCreation) {
-        DateOfFileCreation = dateOfFileCreation;
+        dateOfFileCreation = dateOfFileCreation;
     }
 
     public String getFileSize() {
